@@ -6,17 +6,47 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-
-from enum import Enum
+from enum import Enum, auto
+from options import Options
 
 import re
 
 class Campus(Enum):
     ESIT = 'https://campusingenieriaytecnologia2223.ull.es'
 
-class FirefoxScrapper:
-    def __init__(self, options: webdriver.FirefoxOptions, service: Service) -> None:
-        self.driver = webdriver.Firefox(service=service, options=options)
+class Browser(Enum):
+    SAFARI = auto()
+    FIREFOX = auto()
+
+class Scrapper:
+    def __init__(self, driver_name: Browser, options: Options = None) -> None:
+        self.options = options if options is not None else Options()
+
+        if driver_name == Browser.SAFARI:
+            self.driver = webdriver.Safari()
+        elif driver_name == Browser.FIREFOX:
+            if options is None:
+                raise ValueError('Firefox webdriver needs to know the driver path and profile path')
+
+            if options.profile_path is None:
+                raise ValueError('Profile path not provided')
+
+            firefox_options = webdriver.FirefoxOptions()
+            firefox_options.set_preference('profile', options.profile_path)
+
+            if options.download_path:
+                firefox_options.set_preference('browser.download.folderList', 2)
+                firefox_options.set_preference('browser.download.dir', options.download_path)
+                firefox_options.set_preference('browser.download.useDownloadDir', True)
+
+                # Set the application Portable Document Format to only download pdf and not open it
+                firefox_options.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/pdf')
+                firefox_options.set_preference('pdfjs.disabled', True)
+
+            if options.driver_path is None:
+                raise ValueError('Driver path not provided')
+
+            self.driver = webdriver.Firefox(service=Service(options.driver_path), options=firefox_options)
 
     def navigateTo(self, url: str) -> None:
         self.driver.get(url)
@@ -25,22 +55,9 @@ class FirefoxScrapper:
         self.driver.close()
 
 
-class ULLScrapper (FirefoxScrapper):
-    def __init__(self, profile_path: str, driver_path: str, download_path: str = None, *, verbose: bool = False):
-        options = webdriver.FirefoxOptions()
-        options.set_preference('profile', profile_path)
-
-        if download_path:
-            options.set_preference('browser.download.folderList', 2)
-            options.set_preference('browser.download.dir', download_path)
-            options.set_preference('browser.download.useDownloadDir', True)
-
-            # Set the application Portable Document Format to only download pdf and not open it
-            options.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/pdf')
-            options.set_preference('pdfjs.disabled', True)
-
-        super().__init__(options, Service(driver_path))
-        self.verbose = verbose
+class ULLScrapper (Scrapper):
+    def __init__(self, driver_name: Browser, options: Options = None) -> None:
+        super().__init__(driver_name, options)
 
     def goToLogin(self) -> None:
         WebDriverWait(self.driver, 5) \
@@ -79,15 +96,15 @@ class ULLScrapper (FirefoxScrapper):
         # Not interested in non-pdf files.
         if 'pdf' not in pdf.find_element(By.TAG_NAME, 'img').get_attribute('src'): return
 
-        if self.verbose: print(pdf.text[:-5])
-        pdf.click()
+        if self.options.verbose: print(f' - {pdf.text[:-5]}')
+        # pdf.click()
 
     def downloadAllPDFs(self) -> None:
         subjects_links = self.getSubjectsLinks()
 
         for subject_link in subjects_links:
             self.navigateTo(subject_link)
-            if self.verbose:
+            if self.options.verbose:
                 subject_name = " ".join(re.findall(r'\w+', self.driver.title[8:])).title().replace(" ", "")
                 print(subject_name)
 
@@ -101,4 +118,4 @@ class ULLScrapper (FirefoxScrapper):
             for resource in course_resources:
                 self.downloadPDF(resource)
 
-            if self.verbose: print()
+            if self.options.verbose: print()
