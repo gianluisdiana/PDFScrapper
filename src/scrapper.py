@@ -19,12 +19,25 @@ class Browser(Enum):
     FIREFOX = auto()
 
 class Scrapper:
-    def __init__(self, driver_name: Browser, options: Options = None) -> None:
+    """Represents a basic browser scrapper.
+
+    Attributes:
+        driver (webdriver):
+            The webdriver to use.
+        options (Options):
+            The options to configure the scrapper."""
+
+    def __init__(self, browser: Browser, options: Options = None) -> None:
+        """Initializes the scrapper. If no options are provided, the default options will be used.
+
+        Args:
+            browser (Browser): An enum with the browser to use.
+            options (Options): The options to configure the scrapper."""
         self.options = options if options is not None else Options()
 
-        if driver_name == Browser.SAFARI:
+        if browser == Browser.SAFARI:
             self.driver = webdriver.Safari()
-        elif driver_name == Browser.FIREFOX:
+        elif browser == Browser.FIREFOX:
             if options is None:
                 raise ValueError('Firefox webdriver needs to know the driver path and profile path')
 
@@ -49,15 +62,20 @@ class Scrapper:
             self.driver = webdriver.Firefox(service=Service(options.driver_path), options=firefox_options)
 
     def navigateTo(self, url: str) -> None:
+        """Navigates to the given URL.
+
+        Args:
+            url (str): The URL to browse to."""
         self.driver.get(url)
 
     def close(self) -> None:
+        """Closes the browser."""
         self.driver.close()
 
 
 class ULLScrapper (Scrapper):
-    def __init__(self, driver_name: Browser, options: Options = None) -> None:
-        super().__init__(driver_name, options)
+    def __init__(self, browser: Browser, options: Options = None) -> None:
+        super().__init__(browser, options)
 
     def goToLogin(self) -> None:
         WebDriverWait(self.driver, 5) \
