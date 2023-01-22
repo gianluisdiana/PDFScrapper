@@ -18,7 +18,7 @@ class Options:
         """Initializes the options with default values."""
         self.profile_path: str = None
         self.driver_path: str = None
-        self.download_path: str = None
+        self.download_path: str = '.'
         self.verbose: bool = False
 
     def setProfilePath(self, profile_path: str) -> Options:

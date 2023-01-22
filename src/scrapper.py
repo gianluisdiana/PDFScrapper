@@ -4,15 +4,17 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+import os
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from enum import Enum, auto
-from options import Options
 
-import re
+from options import Options
+from functions import formatText, getNewestFile
 
 class Campus(Enum):
     ESIT = 'https://campusingenieriaytecnologia2223.ull.es'
+    ESIT2122 = 'https://campusingenieriaytecnologia2122.ull.es'
 
 class Browser(Enum):
     SAFARI = auto()
@@ -107,24 +109,29 @@ class ULLScrapper (Scrapper):
             .until(EC.presence_of_element_located((By.CLASS_NAME, "course-content")))
         return BeautifulSoup(course_content.get_attribute('innerHTML'), 'html.parser')
 
-    def downloadPDF(self, resource: Tag) -> None:
+    def downloadPDF(self, resource: Tag) -> str:
         pdf = self.driver.find_element(By.ID, resource.get('id')) \
             .find_element(By.CLASS_NAME, 'aalink')
 
         # Not interested in non-pdf files.
         if 'pdf' not in pdf.find_element(By.TAG_NAME, 'img').get_attribute('src'): return
 
-        if self.options.verbose: print(f' - {pdf.text[:-5]}')
-        # pdf.click()
+        pdf_name = " ".join(pdf.text.split()[:-1])
+        if self.options.verbose: print(f' - {pdf_name}')
+        pdf.click()
+
+        return pdf_name
 
     def downloadAllPDFs(self) -> None:
         subjects_links = self.getSubjectsLinks()
 
         for subject_link in subjects_links:
             self.navigateTo(subject_link)
-            if self.options.verbose:
-                subject_name = " ".join(re.findall(r'\w+', self.driver.title[8:])).title().replace(" ", "")
-                print(subject_name)
+
+            subject_name = formatText(self.driver.title.split(": ")[1])
+            folder_path = os.path.join(self.options.download_path, subject_name)
+            os.mkdir(folder_path)
+            if self.options.verbose: print(subject_name)
 
             course_content = self.getCourseContent()
             course_resources = [
@@ -134,6 +141,10 @@ class ULLScrapper (Scrapper):
                 *course_content.find_all('li', 'activity url modtype_url hasinfo'),]
 
             for resource in course_resources:
-                self.downloadPDF(resource)
+                pdf_name = self.downloadPDF(resource)
+
+                # Rename the downloaded file to the original pdf name.
+                downloaded_file = getNewestFile(self.options.download_path)
+                os.rename(downloaded_file, os.path.join(folder_path, pdf_name + '.pdf'))
 
             if self.options.verbose: print()
