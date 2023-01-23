@@ -14,14 +14,15 @@ def formatText(text: str) -> str:
         .replace(" ", "")
     return text_formatted
 
-def getNewestFile(folder: str) -> str:
+def getNewestFile(folder: str, ext: str) -> str:
     """Gets the newest file in a folder.
 
     Args:
         folder (str): The folder to search.
+        ext (str): The extension of the file.
 
     Returns:
         The name of the newest file.
     """
-    files = [os.path.join(folder, file) for file in os.listdir(folder)]
+    files = [os.path.join(folder, file) for file in os.listdir(folder) if file.endswith(ext)]
     return max(files, key=os.path.getctime)

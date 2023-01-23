@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 import os
+import re
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from enum import Enum, auto
@@ -116,8 +117,8 @@ class ULLScrapper (Scrapper):
         # Not interested in non-pdf files.
         if 'pdf' not in pdf.find_element(By.TAG_NAME, 'img').get_attribute('src'): return
 
-        pdf_name = " ".join(pdf.text.split()[:-1])
-        if self.options.verbose: print(f' - {pdf_name}')
+        pdf_name = " ".join(re.findall(r'\w+', pdf.text)[:-1])
+        if self.options.verbose: print(f'   - {pdf_name}')
         pdf.click()
 
         return pdf_name
@@ -130,21 +131,43 @@ class ULLScrapper (Scrapper):
 
             subject_name = formatText(self.driver.title.split(": ")[1])
             folder_path = os.path.join(self.options.download_path, subject_name)
-            os.mkdir(folder_path)
+            # os.makedirs(folder_path, exist_ok=True)
             if self.options.verbose: print(subject_name)
 
+            if subject_name == 'VisiónPorComputador': continue
+
             course_content = self.getCourseContent()
-            course_resources = [
-                *course_content.find_all('li', 'activity resource modtype_resource'),
-                *course_content.find_all('li', 'activity resource modtype_resource hasinfo'),
-                *course_content.find_all('li', 'activity url modtype_url'),
-                *course_content.find_all('li', 'activity url modtype_url hasinfo'),]
+            course_sections = course_content.find_all('li', 'section main clearfix')
 
-            for resource in course_resources:
-                pdf_name = self.downloadPDF(resource)
+            # TODO: Divide the code in functions.
+            for section in course_sections:
+                section_title = ' '.join(re.findall(r'[-\w]+', section.find('h3', 'sectionname').text))
+                section_path = os.path.join(folder_path, section_title)
+                if self.options.verbose: print(f' - {section_title}')
 
-                # Rename the downloaded file to the original pdf name.
-                downloaded_file = getNewestFile(self.options.download_path)
-                os.rename(downloaded_file, os.path.join(folder_path, pdf_name + '.pdf'))
+                course_resources = [
+                    *section.find_all('li', 'activity resource modtype_resource'),
+                    *section.find_all('li', 'activity resource modtype_resource hasinfo'),
+                    *section.find_all('li', 'activity url modtype_url'),
+                    *section.find_all('li', 'activity url modtype_url hasinfo'),]
+
+                for resource in course_resources:
+                    pdf_name = self.downloadPDF(resource)
+
+                    if pdf_name is None: continue
+
+                    # Rename the downloaded file to the original pdf name.
+                    downloaded = False
+                    while not downloaded:
+                        try:
+                            downloaded = True
+                            downloaded_file = getNewestFile(self.options.download_path, '.pdf')
+                            os.renames(downloaded_file, os.path.join(section_path, pdf_name + '.pdf'))
+                        except ValueError:
+                            print('   - File not downloaded yet.')
+                            downloaded = False
+
+                    # Keep the browser on the same subject page.
+                    if self.driver.current_url != subject_link: self.navigateTo(subject_link)
 
             if self.options.verbose: print()
