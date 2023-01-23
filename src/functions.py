@@ -14,7 +14,7 @@ def formatText(text: str) -> str:
         .replace(" ", "")
     return text_formatted
 
-def getNewestFile(folder: str, ext: str) -> str:
+def getOldestFile(folder: str, ext: str) -> str:
     """Gets the newest file in a folder.
 
     Args:
@@ -25,4 +25,4 @@ def getNewestFile(folder: str, ext: str) -> str:
         The name of the newest file.
     """
     files = [os.path.join(folder, file) for file in os.listdir(folder) if file.endswith(ext)]
-    return max(files, key=os.path.getctime)
+    return min(files, key=os.path.getctime)

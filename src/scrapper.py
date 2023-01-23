@@ -4,14 +4,16 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-import os
-import re
 from bs4 import BeautifulSoup
 from bs4.element import Tag
+
+import os
+import re
+import time
 from enum import Enum, auto
 
 from options import Options
-from functions import formatText, getNewestFile
+from functions import formatText, getOldestFile
 
 class Campus(Enum):
     ESIT = 'https://campusingenieriaytecnologia2223.ull.es'
@@ -79,6 +81,8 @@ class Scrapper:
 class ULLScrapper (Scrapper):
     def __init__(self, browser: Browser, options: Options = None) -> None:
         super().__init__(browser, options)
+        self.downloaded_files: list[dict] = []
+        self.pdf_downloaded = 0
 
     def goToLogin(self) -> None:
         WebDriverWait(self.driver, 5) \
@@ -128,17 +132,13 @@ class ULLScrapper (Scrapper):
         if self.options.verbose: print(f'   - {pdf_name}')
         pdf.click()
 
-        return pdf_name
+        # Wait for the file to be downloaded, checking the amount of files in the folder.
+        while self.pdf_downloaded == len(os.listdir(self.options.download_path)):
+            time.sleep(0.1)
 
-    def renameNewestPDFFile(self, new_path: str) -> None:
-        downloaded = False
-        while not downloaded:
-            try:
-                downloaded_file = getNewestFile(self.options.download_path, '.pdf')
-                os.renames(downloaded_file, new_path)
-                downloaded = True
-            except ValueError:
-               if self.options.verbose: print('--- File not downloaded yet. ---')
+        self.pdf_downloaded += 1
+
+        return pdf_name
 
     def downloadAllPDFs(self) -> None:
         subjects_links = self.getSubjectsLinks()
@@ -161,9 +161,15 @@ class ULLScrapper (Scrapper):
                     pdf_name = self.downloadPDF(resource)
 
                     if pdf_name is None: continue
+                    self.downloaded_files.append({'name': pdf_name, 'path': section_path})
 
-                    self.renameNewestPDFFile(os.path.join(section_path, f'{pdf_name}.pdf'))
                     # Keep the browser on the same subject page.
                     if self.driver.current_url != subject_link: self.navigateTo(subject_link)
 
             if self.options.verbose: print()
+
+    def renameDownloadedFiles(self) -> None:
+        for file in self.downloaded_files:
+            new_path = os.path.join(file['path'], file['name'] + '.pdf')
+            downloaded_file = getOldestFile(self.options.download_path, '.pdf')
+            os.renames(downloaded_file, new_path)
