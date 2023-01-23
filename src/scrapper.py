@@ -110,6 +110,13 @@ class ULLScrapper (Scrapper):
             .until(EC.presence_of_element_located((By.CLASS_NAME, "course-content")))
         return BeautifulSoup(course_content.get_attribute('innerHTML'), 'html.parser')
 
+    def getSectionResources(self, section: Tag) -> list[Tag]:
+        return [
+            *section.find_all('li', 'activity resource modtype_resource'),
+            *section.find_all('li', 'activity resource modtype_resource hasinfo'),
+            *section.find_all('li', 'activity url modtype_url'),
+            *section.find_all('li', 'activity url modtype_url hasinfo'),]
+
     def downloadPDF(self, resource: Tag) -> str:
         pdf = self.driver.find_element(By.ID, resource.get('id')) \
             .find_element(By.CLASS_NAME, 'aalink')
@@ -123,6 +130,16 @@ class ULLScrapper (Scrapper):
 
         return pdf_name
 
+    def renameNewestPDFFile(self, new_path: str) -> None:
+        downloaded = False
+        while not downloaded:
+            try:
+                downloaded_file = getNewestFile(self.options.download_path, '.pdf')
+                os.renames(downloaded_file, new_path)
+                downloaded = True
+            except ValueError:
+               if self.options.verbose: print('--- File not downloaded yet. ---')
+
     def downloadAllPDFs(self) -> None:
         subjects_links = self.getSubjectsLinks()
 
@@ -130,43 +147,22 @@ class ULLScrapper (Scrapper):
             self.navigateTo(subject_link)
 
             subject_name = formatText(self.driver.title.split(": ")[1])
-            folder_path = os.path.join(self.options.download_path, subject_name)
-            # os.makedirs(folder_path, exist_ok=True)
+            subject_path = os.path.join(self.options.download_path, subject_name)
             if self.options.verbose: print(subject_name)
 
-            if subject_name == 'VisiónPorComputador': continue
+            course_sections = self.getCourseContent().find_all('li', 'section main clearfix')
 
-            course_content = self.getCourseContent()
-            course_sections = course_content.find_all('li', 'section main clearfix')
-
-            # TODO: Divide the code in functions.
             for section in course_sections:
                 section_title = ' '.join(re.findall(r'[-\w]+', section.find('h3', 'sectionname').text))
-                section_path = os.path.join(folder_path, section_title)
+                section_path = os.path.join(subject_path, section_title)
                 if self.options.verbose: print(f' - {section_title}')
 
-                course_resources = [
-                    *section.find_all('li', 'activity resource modtype_resource'),
-                    *section.find_all('li', 'activity resource modtype_resource hasinfo'),
-                    *section.find_all('li', 'activity url modtype_url'),
-                    *section.find_all('li', 'activity url modtype_url hasinfo'),]
-
-                for resource in course_resources:
+                for resource in self.getSectionResources(section):
                     pdf_name = self.downloadPDF(resource)
 
                     if pdf_name is None: continue
 
-                    # Rename the downloaded file to the original pdf name.
-                    downloaded = False
-                    while not downloaded:
-                        try:
-                            downloaded = True
-                            downloaded_file = getNewestFile(self.options.download_path, '.pdf')
-                            os.renames(downloaded_file, os.path.join(section_path, pdf_name + '.pdf'))
-                        except ValueError:
-                            print('   - File not downloaded yet.')
-                            downloaded = False
-
+                    self.renameNewestPDFFile(os.path.join(section_path, f'{pdf_name}.pdf'))
                     # Keep the browser on the same subject page.
                     if self.driver.current_url != subject_link: self.navigateTo(subject_link)
 
